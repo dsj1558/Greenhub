@@ -1,0 +1,269 @@
+-- โหลด Rayfield UI Library
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+   Name = "🎖️ Blood & Iron | Tactical Hub",
+   LoadingTitle = "Loading Napoleonic Combat Tools...",
+   LoadingSubtitle = "Custom Build for dsj1558",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+-- บริการพื้นฐานของ Roblox
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ตารางตั้งค่าทั้งหมด (Config)
+getgenv().BnISettings = {
+   -- Hitbox Expander
+   HitboxEnabled = false,
+   HitboxSize = 6,
+   HitboxTransparency = 0.7, -- โปร่งแสงเพื่อให้เห็นตัวศัตรูข้างใน
+   
+   -- Silent Aim & Center FOV
+   SilentAimEnabled = false,
+   ShowFOV = false,
+   FOVSize = 120,
+   FOVColor = Color3.fromRGB(255, 255, 255),
+   
+   -- ESP (เฉพาะศัตรู + บอกเลือด)
+   ESPEnabled = false,
+   ESPColor = Color3.fromRGB(255, 65, 65)
+}
+
+-- ==========================================
+-- 1. ระบบวาดวงกลม FOV (ล็อกไว้กึ่งกลางหน้าจอเสมอ)
+-- ==========================================
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 64
+FOVCircle.Radius = getgenv().BnISettings.FOVSize
+FOVCircle.Filled = false
+FOVCircle.Visible = false
+FOVCircle.Color = getgenv().BnISettings.FOVColor
+FOVCircle.Transparency = 0.8
+
+RunService.RenderStepped:Connect(function()
+    -- คำนวณจุดกึ่งกลางหน้าจอเสมอ (ไม่ขยับตามนิ้วหรือเมาส์)
+    local ViewportSize = Camera.ViewportSize
+    FOVCircle.Position = Vector2.new(ViewportSize.X / 2, ViewportSize.Y / 2)
+    FOVCircle.Radius = getgenv().BnISettings.FOVSize
+    FOVCircle.Visible = getgenv().BnISettings.ShowFOV
+end)
+
+-- ฟังก์ชันเช็คว่าเป็นศัตรูหรือไม่ (ไม่ยุ่งกับทีมตัวเอง)
+local function IsEnemy(player)
+    if player == LocalPlayer then return false end
+    if player.Team == nil or LocalPlayer.Team == nil then return false end
+    return player.Team ~= LocalPlayer.Team
+end
+
+-- ==========================================
+-- 2. ระบบ Hitbox Expander (ขยายกล่องรับดาเมจ + โชว์กล่อง)
+-- ==========================================
+RunService.Heartbeat:Connect(function()
+    for _, player in ipairs(Players:GetPlayers()) do
+        if IsEnemy(player) and player.Character then
+            local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+            local hum = player.Character:FindFirstChild("Humanoid")
+            
+            if hrp and hum and hum.Health > 0 then
+                if getgenv().BnISettings.HitboxEnabled then
+                    hrp.Size = Vector3.new(getgenv().BnISettings.HitboxSize, getgenv().BnISettings.HitboxSize, getgenv().BnISettings.HitboxSize)
+                    hrp.Transparency = getgenv().BnISettings.HitboxTransparency
+                    hrp.BrickColor = BrickColor.new("Bright red")
+                    hrp.Material = Enum.Material.Neon
+                    hrp.CanCollide = false -- ป้องกันเดินชนกล่องแล้วติด
+                else
+                    -- คืนค่าเดิมเมื่อปิดใช้งาน
+                    hrp.Size = Vector3.new(2, 2, 1)
+                    hrp.Transparency = 1
+                    hrp.CanCollide = false
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- 3. ระบบ ESP ศัตรู + บอกเลือด (ไม่แสดงทีมตัวเอง)
+-- ==========================================
+local ESPFolder = Instance.new("Folder", game:GetService("CoreGui"))
+ESPFolder.Name = "BnI_EnemyESP"
+
+local function ClearESP()
+    for _, child in ipairs(ESPFolder:GetChildren()) do
+        child:Destroy()
+    end
+end
+
+local function UpdateESP()
+    ClearESP()
+    if not getgenv().BnISettings.ESPEnabled then return end
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if IsEnemy(player) and player.Character then
+            local char = player.Character
+            local hum = char:FindFirstChild("Humanoid")
+            local head = char:FindFirstChild("Head")
+
+            if hum and head and hum.Health > 0 then
+                -- สร้างเส้นขอบ Highlight รอบตัวศัตรู
+                local highlight = Instance.new("Highlight", ESPFolder)
+                highlight.Adornee = char
+                highlight.FillColor = getgenv().BnISettings.ESPColor
+                highlight.FillTransparency = 0.75
+                highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                highlight.OutlineTransparency = 0.2
+
+                -- สร้างป้ายชื่อ + แถบเลือดบนหัว
+                local billboard = Instance.new("BillboardGui", ESPFolder)
+                billboard.Adornee = head
+                billboard.Size = UDim2.new(0, 150, 0, 40)
+                billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                billboard.AlwaysOnTop = true
+
+                local textLabel = Instance.new("TextLabel", billboard)
+                textLabel.Size = UDim2.new(1, 0, 1, 0)
+                textLabel.BackgroundTransparency = 1
+                textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                textLabel.TextStrokeTransparency = 0
+                textLabel.TextScaled = false
+                textLabel.TextSize = 13
+                textLabel.Font = Enum.Font.GothamBold
+                
+                local hp = math.floor(hum.Health)
+                local maxHp = math.floor(hum.MaxHealth)
+                textLabel.Text = string.format("%s\n[HP: %d/%d]", player.Name, hp, maxHp)
+            end
+        end
+    end
+end
+
+-- อัปเดต ESP ทุกๆ 0.25 วินาที เพื่อความลื่นไหลไม่กิน FPS
+task.spawn(function()
+    while task.wait(0.25) do
+        pcall(UpdateESP)
+    end
+end)
+
+-- ==========================================
+-- 4. ฟังก์ชันหาเป้าหมายในวง FOV กลางจอ (สำหรับ Silent Aim)
+-- ==========================================
+local function GetClosestEnemyInCenterFOV()
+    local target = nil
+    local shortestDist = getgenv().BnISettings.FOVSize
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if IsEnemy(player) and player.Character then
+            local hum = player.Character:FindFirstChild("Humanoid")
+            local targetPart = player.Character:FindFirstChild("Head") or player.Character:FindFirstChild("HumanoidRootPart")
+
+            if hum and targetPart and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToScreenPoint(targetPart.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    if dist <= shortestDist then
+                        shortestDist = dist
+                        target = targetPart
+                    end
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- Hook ระบบยิงกระสุน / Raycast ของเกม (รองรับ Silent Aim)
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    local args = {...}
+
+    if getgenv().BnISettings.SilentAimEnabled and not checkcaller() then
+        if method == "Raycast" and self == workspace then
+            local targetPart = GetClosestEnemyInCenterFOV()
+            if targetPart then
+                local origin = args[1]
+                -- เบี่ยงทิศทางกระสุนไปยังเป้าหมายที่อยู่ในวง FOV กลางจอ
+                args[2] = (targetPart.Position - origin).Unit * 1000
+                return oldNamecall(self, unpack(args))
+            end
+        end
+    end
+
+    return oldNamecall(self, ...)
+end)
+
+-- ==========================================
+-- 5. สร้างหน้าต่างควบคุมใน Rayfield UI
+-- ==========================================
+local CombatTab = Window:CreateTab("⚔️ Combat", 4483362458)
+
+CombatTab:CreateSection("Silent Aim & Center FOV")
+
+CombatTab:CreateToggle({
+   Name = "Enable Silent Aim (ยิงเข้าเป้าในวงอัตโนมัติ)",
+   CurrentValue = false,
+   Callback = function(Value)
+      getgenv().BnISettings.SilentAimEnabled = Value
+   end,
+})
+
+CombatTab:CreateToggle({
+   Name = "Show Center FOV (แสดงวงเล็งกลางจอ)",
+   CurrentValue = false,
+   Callback = function(Value)
+      getgenv().BnISettings.ShowFOV = Value
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "FOV Radius (ขนาดวงเล็งกลางจอ)",
+   Range = {30, 400},
+   Increment = 5,
+   Suffix = "px",
+   CurrentValue = 120,
+   Callback = function(Value)
+      getgenv().BnISettings.FOVSize = Value
+   end,
+})
+
+CombatTab:CreateSection("Hitbox Expander")
+
+CombatTab:CreateToggle({
+   Name = "Enable Hitbox Expander (ขยายตัวศัตรู + โชว์กล่อง)",
+   CurrentValue = false,
+   Callback = function(Value)
+      getgenv().BnISettings.HitboxEnabled = Value
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "Hitbox Size (ขนาดกล่องรับดาเมจ)",
+   Range = {2, 25},
+   Increment = 1,
+   Suffix = " Studs",
+   CurrentValue = 6,
+   Callback = function(Value)
+      getgenv().BnISettings.HitboxSize = Value
+   end,
+})
+
+local VisualTab = Window:CreateTab("👁️ Visuals (ESP)", 4483362458)
+
+VisualTab:CreateToggle({
+   Name = "Enemy ESP + HP (มองทะลุเฉพาะศัตรู + บอกเลือด)",
+   CurrentValue = false,
+   Callback = function(Value)
+      getgenv().BnISettings.ESPEnabled = Value
+      if not Value then
+          ClearESP()
+      end
+   end,
+})
